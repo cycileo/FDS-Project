@@ -38,3 +38,7 @@ PlantVillage/
 # Other common file types
 *.bak
 *.swp
+
+wrong_predictions_32_width/
+plant_disease_model_256_2layer_16initial.pth
+plant_disease_model_256_3layer_32initial.pth
