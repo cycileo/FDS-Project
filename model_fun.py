@@ -296,3 +296,37 @@ def load_data(image_width, main_folder='PlantVillage', batch_size=32, num_worker
     class_names = train_dataset.classes
 
     return train_loader, val_loader, test_loader, class_names
+
+
+def load_test_data(image_width, test_folder='PlantDiseases', batch_size=32, num_workers=4):
+    """
+    Load and preprocess the test dataset.
+
+    Parameters:
+    - image_width (int): The width (and height) to resize images to.
+    - test_folder (str): The folder path containing the test dataset.
+    - batch_size (int): Batch size for the DataLoader.
+    - num_workers (int): Number of workers for DataLoader.
+
+    Returns:
+    - test_loader (DataLoader): DataLoader for the test dataset.
+    - class_names (list): List of class names from the dataset.
+    """
+
+    # Define transformations for the test dataset
+    transform = transforms.Compose([
+        transforms.Resize((image_width, image_width)),  # Resize all images
+        transforms.ToTensor(),          # Convert images to PyTorch tensors
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize
+    ])
+
+    # Load the test dataset
+    test_dataset = datasets.ImageFolder(root=test_folder, transform=transform)
+
+    # Create DataLoader for the test dataset
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    # Extract class names
+    class_names = test_dataset.classes
+
+    return test_loader, class_names
