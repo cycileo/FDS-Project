@@ -9,8 +9,6 @@ from torchvision import datasets, transforms
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # Use GPU if available
 
-
-
 class SimpleCNN(nn.Module):
     def __init__(self, num_classes, image_width, num_layers=2, first_layer_filters=16):
         super(SimpleCNN, self).__init__()
@@ -49,9 +47,7 @@ class SimpleCNN(nn.Module):
         x = self.classifier(x)
         return x
 
-
-
-
+import matplotlib.pyplot as plt
 
 def train_model(model, num_classes, train_loader, val_loader, epoch=50):
     """
@@ -79,6 +75,10 @@ def train_model(model, num_classes, train_loader, val_loader, epoch=50):
     patience = 5  # Number of epochs with no improvement after which training will stop
     best_val_loss = float('inf')  # Initialize best validation loss as infinity
     epochs_without_improvement = 0
+
+    # Lists to store validation accuracy and loss for plotting later
+    val_accuracies = []
+    val_losses = []
 
     # Training loop
     for epoch in range(max_epochs):
@@ -119,6 +119,10 @@ def train_model(model, num_classes, train_loader, val_loader, epoch=50):
         print(f"Validation Accuracy: {accuracy:.2f}%")
         print(f"Validation Loss: {avg_val_loss:.4f}")
         
+        # Append validation metrics to the lists
+        val_accuracies.append(accuracy)
+        val_losses.append(avg_val_loss)
+
         # Check for early stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
@@ -134,8 +138,28 @@ def train_model(model, num_classes, train_loader, val_loader, epoch=50):
             print("Maximum number of epochs reached.")
             break
 
+    # Plot validation accuracy and loss
+    plt.figure(figsize=(12, 6))
 
+    # Subplot 1: Validation Accuracy
+    plt.subplot(1, 2, 1)
+    plt.plot(range(1, len(val_accuracies) + 1), val_accuracies, label='Validation Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy (%)')
+    plt.title('Validation Accuracy per Epoch')
+    plt.grid(True)
 
+    # Subplot 2: Validation Loss
+    plt.subplot(1, 2, 2)
+    plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss', color='red')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Validation Loss per Epoch')
+    plt.grid(True)
+
+    # Show the plots
+    plt.tight_layout()
+    plt.show()
 
 def test_model(model, test_loader):
     """
@@ -185,8 +209,6 @@ def test_model(model, test_loader):
     print(f"\nTest Accuracy: {test_accuracy:.2f}%")
     print(f"Test F1 Score (Weighted): {f1:.4f}")
 
-
-
 def evaluate_model(model, test_loader, class_names):
     """
     Evaluates the model on the test dataset and computes the classification metrics.
@@ -221,7 +243,6 @@ def evaluate_model(model, test_loader, class_names):
 
     return cm, metrics_report
 
-
 def load_model(file_path, num_classes, image_width, num_layers, first_layer_filters):
     """
     Creates a SimpleCNN model using the provided hyperparameters, loads the state dictionary
@@ -253,8 +274,6 @@ def load_model(file_path, num_classes, image_width, num_layers, first_layer_filt
     model = model.to(device)
 
     return model
-
-
 
 def load_data(image_width, main_folder='PlantVillage', batch_size=32, num_workers=4):
     """
@@ -296,7 +315,6 @@ def load_data(image_width, main_folder='PlantVillage', batch_size=32, num_worker
     class_names = train_dataset.classes
 
     return train_loader, val_loader, test_loader, class_names
-
 
 def load_test_data(image_width, test_folder='PlantDiseases', batch_size=32, num_workers=4):
     """
