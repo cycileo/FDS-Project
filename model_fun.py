@@ -236,6 +236,50 @@ def evaluate_model(model, test_loader, class_names):
 
     return cm, metrics_report
 
+
+def evaluate_model_disease(model, test_loader, class_names):
+    """
+    Evaluates the model on the test dataset, aggregating metrics by diseases.
+
+    The function calculates the classification report (including precision, recall, F1 score) and the confusion matrix
+    for diseases, where each class is named in the format 'species___disease'.
+
+    Args:
+        model (torch.nn.Module): The trained neural network model to be evaluated.
+        test_loader (DataLoader): The DataLoader for the test dataset.
+        class_names (list of str): A list of class names corresponding to the output classes in the format 'species___disease'.
+
+    Returns:
+        tuple: A tuple containing:
+            - confusion_matrix (np.ndarray): The confusion matrix of predicted vs true labels aggregated by diseases.
+            - metrics_report (str): The classification report including precision, recall, and F1 score for diseases.
+    """
+    # Extract diseases from class names
+    disease_names = [name.split("___")[1] for name in class_names]
+    unique_diseases = sorted(set(disease_names))
+    disease_to_idx = {disease: i for i, disease in enumerate(unique_diseases)}
+
+    model.eval()
+    all_preds, all_labels = [], []
+    with torch.no_grad():
+        for inputs, labels in test_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    # Map class-level predictions and labels to disease-level
+    disease_preds = [disease_to_idx[disease_names[pred]] for pred in all_preds]
+    disease_labels = [disease_to_idx[disease_names[label]] for label in all_labels]
+
+    # Calculate metrics and confusion matrix
+    metrics_report = classification_report(disease_labels, disease_preds, target_names=unique_diseases, output_dict=True)
+    cm = confusion_matrix(disease_labels, disease_preds)
+
+    return cm, metrics_report
+
+
 def load_model(file_path, num_classes, image_width, num_layers, first_layer_filters):
     """
     Creates a SimpleCNN model using the provided hyperparameters, loads the state dictionary
