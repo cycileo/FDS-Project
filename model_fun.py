@@ -1,11 +1,13 @@
 import torch.optim as optim
-from sklearn.metrics import f1_score, classification_report, confusion_matrix
 import torch.nn as nn
 import torch
-from tqdm import tqdm
+import time
 import os
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from sklearn.metrics import f1_score, classification_report, confusion_matrix
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # Use GPU if available
 
@@ -47,8 +49,6 @@ class SimpleCNN(nn.Module):
         x = self.classifier(x)
         return x
 
-import matplotlib.pyplot as plt
-
 def train_model(model, num_classes, train_loader, val_loader, epoch=50):
     """
     Trains the given model using the provided training and validation datasets.
@@ -64,7 +64,10 @@ def train_model(model, num_classes, train_loader, val_loader, epoch=50):
         epoch (int): The maximum number of epochs to train the model. Default is 50.
 
     Returns:
-        None: The function updates the model's weights in place.
+        tuple: A tuple containing:
+            - val_accuracies (list): Validation accuracy history.
+            - val_losses (list): Validation loss history.
+            - elapsed_time (float): Total training time in seconds.
     """
 
     criterion = nn.CrossEntropyLoss()
@@ -79,6 +82,9 @@ def train_model(model, num_classes, train_loader, val_loader, epoch=50):
     # Lists to store validation accuracy and loss for plotting later
     val_accuracies = []
     val_losses = []
+
+    # Start timing the training process
+    start_time = time.time()
 
     # Training loop
     for epoch in range(max_epochs):
@@ -138,28 +144,11 @@ def train_model(model, num_classes, train_loader, val_loader, epoch=50):
             print("Maximum number of epochs reached.")
             break
 
-    # Plot validation accuracy and loss
-    plt.figure(figsize=(12, 6))
+    # End timing the training process
+    elapsed_time = time.time() - start_time
 
-    # Subplot 1: Validation Accuracy
-    plt.subplot(1, 2, 1)
-    plt.plot(range(1, len(val_accuracies) + 1), val_accuracies, label='Validation Accuracy')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy (%)')
-    plt.title('Validation Accuracy per Epoch')
-    plt.grid(True)
-
-    # Subplot 2: Validation Loss
-    plt.subplot(1, 2, 2)
-    plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss', color='red')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.title('Validation Loss per Epoch')
-    plt.grid(True)
-
-    # Show the plots
-    plt.tight_layout()
-    plt.show()
+    # Return validation accuracy and loss history, along with elapsed time
+    return val_accuracies, val_losses, elapsed_time, epoch
 
 def test_model(model, test_loader):
     """
@@ -348,3 +337,36 @@ def load_test_data(image_width, test_folder='PlantDiseases', batch_size=32, num_
     class_names = test_dataset.classes
 
     return test_loader, class_names
+
+def plot_training_epochs_hystory(val_accuracies, val_losses, epochs):
+    """
+    Plots validation accuracies and losses over epochs.
+
+    Args:
+        val_accuracies (list): List of validation accuracies over epochs.
+        val_losses (list): List of validation losses over epochs.
+    """
+    epochs = range(1, len(val_accuracies) + 1)
+
+    fig, ax1 = plt.subplots()
+
+    # Plot validation accuracy
+    ax1.set_xlabel('Epochs')
+    ax1.set_ylabel('Validation Accuracy (%)', color='tab:blue')
+    acc_line, = ax1.plot(epochs, val_accuracies, color='tab:blue', label='Accuracy')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+    # Create a second y-axis for validation loss
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Validation Loss', color='tab:red')
+    loss_line, = ax2.plot(epochs, val_losses, color='tab:red', label='Loss')
+    ax2.tick_params(axis='y', labelcolor='tab:red')
+
+    # # Combine legends from both axes
+    # fig.legend([acc_line, loss_line], ['Accuracy', 'Loss'], loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=2)
+
+    # Title and grid
+    plt.title('Validation Accuracy and Loss Over Epochs')
+    plt.grid(True)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to make space for the legend
+    plt.show()
