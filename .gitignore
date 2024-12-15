@@ -39,6 +39,6 @@ PlantVillage/
 *.bak
 *.swp
 
-wrong_predictions_32_width/
+wrong_predictions_images/
 plant_disease_model_256_2layer_16initial.pth
 plant_disease_model_256_3layer_32initial.pth

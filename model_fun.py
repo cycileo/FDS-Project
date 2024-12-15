@@ -3,11 +3,15 @@ import torch.nn as nn
 import torch
 import time
 import os
+import shutil
 import matplotlib.pyplot as plt
+import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from collections import Counter
 from sklearn.metrics import f1_score, classification_report, confusion_matrix
+from torchvision.utils import save_image
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # Use GPU if available
 
@@ -283,7 +287,7 @@ def load_data(image_width, main_folder='PlantVillage', batch_size=32, num_worker
     transform = transforms.Compose([
         transforms.Resize((image_width, image_width)),  # Resize all images
         transforms.ToTensor(),          # Convert images to PyTorch tensors
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize
+        # transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])  # Normalize
     ])
 
     # Build dataset paths dynamically
@@ -370,3 +374,173 @@ def plot_training_epochs_hystory(val_accuracies, val_losses, epochs):
     plt.grid(True)
     plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to make space for the legend
     plt.show()
+
+def collect_misclassified_images(model, dataloader, output_dir, device):
+    """
+    Collect misclassified images and save them in folders based on their true labels,
+    along with their predicted labels and confidence scores. Additionally, compute statistics
+    about the misclassified and total images per class.
+
+    Args:
+        model (torch.nn.Module): The trained model to evaluate.
+        dataloader (torch.utils.data.DataLoader): The DataLoader containing the dataset.
+        output_dir (str): The directory where misclassified images will be saved.
+        device (torch.device): The device (CPU or GPU) to use for inference.
+
+    Returns:
+        dict: A dictionary containing counts of total and misclassified images per class.
+    """
+    # Ensure the model is in evaluation mode
+    model.eval()
+
+    # Prepare the output directory
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)  # Remove existing directory
+    os.makedirs(output_dir)
+
+    total_counts = Counter()  # Total images per class
+    misclassified_counts = Counter()  # Misclassified images per class
+
+    # Disable gradient computation
+    with torch.no_grad():
+        for batch_idx, (images, labels) in enumerate(dataloader):
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predictions = torch.max(outputs, 1)
+
+            # Update total counts for each class
+            total_counts.update(labels.cpu().tolist())
+
+            # Identify misclassified indices
+            misclassified_indices = (predictions != labels).nonzero(as_tuple=True)[0]
+
+            for idx in misclassified_indices:
+                image = images[idx]
+                true_label = labels[idx].item()
+                predicted_label = predictions[idx].item()
+                confidence = torch.softmax(outputs[idx], 0)[predicted_label].item()  # Confidence score
+
+                # Update misclassified counts
+                misclassified_counts[true_label] += 1
+
+                # Create subdirectory for the true label
+                true_label_dir = os.path.join(output_dir, f"class_{true_label}")
+                if not os.path.exists(true_label_dir):
+                    os.makedirs(true_label_dir)
+
+                # Save the misclassified image
+                image_path = os.path.join(
+                    true_label_dir, f"img_{batch_idx}_{idx}_pred_{predicted_label}_conf_{confidence:.2f}.png"
+                )
+                save_image(image, image_path)
+
+    # Print statistics
+    print("Class-wise statistics:")
+    for cls in sorted(total_counts.keys()):
+        total = total_counts[cls]
+        misclassified = misclassified_counts[cls]
+        error_rate = (misclassified / total) * 100 if total > 0 else 0
+        print(f"{cls}: Total={total}, Misclassified={misclassified}, Error Rate={error_rate:.2f}%")
+
+    # Return statistics for further analysis
+    return {
+        "total_counts": total_counts,
+        "misclassified_counts": misclassified_counts
+    }
+
+def plot_class_statistics(stats):
+    """
+    Plot the statistics of total and misclassified images per class.
+
+    Args:
+        stats (dict): Dictionary containing 'total_counts' and 'misclassified_counts'.
+    """
+    total_counts = stats['total_counts']
+    misclassified_counts = stats['misclassified_counts']
+
+    # Convert counters to sorted lists
+    classes = sorted(total_counts.keys())
+    total = [total_counts[cls] for cls in classes]
+    misclassified = [misclassified_counts[cls] for cls in classes]
+    error_rate = [(misclassified[i] / total[i]) * 100 if total[i] > 0 else 0 for i in range(len(classes))]
+
+    # Create bar plot
+    x = np.arange(len(classes))  # Class indices
+
+    plt.figure(figsize=(10, 6))
+
+    # Bar plots for total and misclassified images
+    plt.bar(x - 0.2, total, width=0.4, label='Total Images', color='skyblue')
+    plt.bar(x + 0.2, misclassified, width=0.4, label='Misclassified Images', color='salmon')
+
+    # Add error rate as a line plot
+    plt.plot(x, error_rate, label='Error Rate (%)', color='green', marker='o', linewidth=2)
+
+    # Add labels and title
+    plt.xlabel('Class', fontsize=12)
+    plt.ylabel('Count / Error Rate (%)', fontsize=12)
+    plt.title('Class-wise Statistics', fontsize=14)
+    plt.xticks(x, [f'{cls}' for cls in classes], rotation=45, fontsize=10)
+    plt.legend()
+    plt.tight_layout()
+
+    # Show plot
+    plt.show()
+
+# Example usage:
+# Assuming `stats` is the dictionary returned by `collect_misclassified_images`
+# plot_class_statistics(stats)
+
+def plot_high_error_classes(stats):
+    """
+    Plot statistics for classes with an error rate higher than the average error rate.
+
+    Args:
+        stats (dict): Dictionary containing 'total_counts' and 'misclassified_counts'.
+    """
+    total_counts = stats['total_counts']
+    misclassified_counts = stats['misclassified_counts']
+
+    # Convert counters to sorted lists
+    classes = sorted(total_counts.keys())
+    total = [total_counts[cls] for cls in classes]
+    misclassified = [misclassified_counts[cls] for cls in classes]
+    error_rate = [(misclassified[i] / total[i]) * 100 if total[i] > 0 else 0 for i in range(len(classes))]
+
+    # Calculate average error rate
+    avg_error_rate = sum(error_rate) / len([e for e in error_rate if e > 0])
+
+    # Filter classes with error rate above average
+    filtered_data = [(cls, total[i], misclassified[i], error_rate[i])
+                     for i, cls in enumerate(classes) if error_rate[i] > avg_error_rate]
+
+    # Unpack filtered data
+    filtered_classes, filtered_total, filtered_misclassified, filtered_error_rate = zip(*filtered_data)
+
+    # Create bar plot
+    x = np.arange(len(filtered_classes))  # Class indices
+
+    plt.figure(figsize=(10, 6))
+
+    # Bar plots for total and misclassified images
+    plt.bar(x - 0.2, filtered_total, width=0.4, label='Total Images', color='skyblue')
+    plt.bar(x + 0.2, filtered_misclassified, width=0.4, label='Misclassified Images', color='salmon')
+
+    # Add error rate as a line plot
+    plt.plot(x, filtered_error_rate, label='Error Rate (%)', color='green', marker='o', linewidth=2)
+
+    # Add labels and title
+    plt.xlabel('Class', fontsize=12)
+    plt.ylabel('Count / Error Rate (%)', fontsize=12)
+    plt.title(f'Classes with Error Rate Above Average ({avg_error_rate:.2f}%)', fontsize=14)
+    plt.xticks(x, [f'{cls}' for cls in filtered_classes], rotation=45, fontsize=10)
+    plt.legend()
+    plt.tight_layout()
+
+    # Show plot
+    plt.show()
+
+# Example usage:
+# Assuming `stats` is the dictionary returned by `collect_misclassified_images`
+# plot_high_error_classes(stats)
+
